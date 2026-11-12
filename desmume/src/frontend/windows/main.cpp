@@ -664,6 +664,9 @@ void ScaleScreen(float factor, bool user)
 			else
 				if (video.layout == 2)
 					MainWindow->setClientSize((int)(video.rotatedwidthgap() * factor), (int)(video.rotatedheightgap() * factor / 2));
+				else
+					if (video.layout == 3)
+						MainWindow->setClientSize((int)(video.rotatedwidthgap() * factor * 2), (int)(video.rotatedheightgap() * factor));
 	}
 }
 
@@ -686,6 +689,30 @@ void UnscaleScreenCoords(s32& x, s32& y)
 	pt.x = x; pt.y = y;
 	ClientToScreen(hwnd,&pt);
 	x = pt.x; y = pt.y;
+
+	if (video.layout == 3)
+	{
+		// custom layouts: map the pointer onto the rectangle that shows the touch screen
+		bool lowerPosition = true;
+		const RECT* touchRect = CustomLayoutTouchRect(&lowerPosition);
+		if (touchRect == NULL)
+		{
+			x = 0;
+			y = 0;
+			return;
+		}
+		const int tw = touchRect->right - touchRect->left;
+		const int th = touchRect->bottom - touchRect->top;
+		if (tw <= 0 || th <= 0)
+		{
+			x = 0;
+			y = 0;
+			return;
+		}
+		x = ((x - touchRect->left) * GPU_FRAMEBUFFER_NATIVE_WIDTH) / tw;
+		y = ((y - touchRect->top) * GPU_FRAMEBUFFER_NATIVE_HEIGHT) / th + (lowerPosition ? GPU_FRAMEBUFFER_NATIVE_HEIGHT : 0);
+		return;
+	}
 
 	RECT r;
 	GetNdsScreenRect(&r);
@@ -779,7 +806,7 @@ void ToDSScreenRelativeCoords(s32& x, s32& y, int whichScreen)
 	// finally, make it relative to the correct screen
 	const bool isMainGPUFirst = (GPU->GetDisplayInfo().engineID[NDSDisplayID_Main] == GPUEngineID_Main);
 
-	if (video.layout == 0 || video.layout == 2)
+	if (video.layout == 0 || video.layout == 2 || video.layout == 3)
 	{
 		if(whichScreen)
 		{
@@ -1021,6 +1048,15 @@ void LCDsSwap(int swapVal)
 	WritePrivateProfileInt("Video", "LCDsSwap", video.swap, IniName);
 }
 
+static void RefreshCustomLayoutMenu()
+{
+	const bool custom = (video.layout == 3);
+	MainWindow->checkMenu(ID_LCDS_CUSTOM_TOPBIG, custom && customLayoutPreset == 0);
+	MainWindow->checkMenu(ID_LCDS_CUSTOM_HYBRID, custom && customLayoutPreset == 1);
+	MainWindow->checkMenu(ID_LCDS_CUSTOM_PIP, custom && customLayoutPreset == 2);
+	MainWindow->checkMenu(ID_LCDS_CUSTOM_FOCUS, custom && customTopFocus);
+}
+
 void doLCDsLayout(int videoLayout)
 {
 	HWND hwnd = MainWindow->getHWnd();
@@ -1029,7 +1065,10 @@ void doLCDsLayout(int videoLayout)
 	if (maximized)
 		RestoreWindow(hwnd);
 
-	if (videoLayout > 2) videoLayout = 0;
+	if (videoLayout > 3) videoLayout = 0;
+	// custom layouts are only available with the DirectDraw display methods
+	if (videoLayout == 3 && displayMethod != DISPMETHOD_DDRAW_HW && displayMethod != DISPMETHOD_DDRAW_SW)
+		videoLayout = 0;
 
 	if(videoLayout != 0)
 	{
@@ -1040,7 +1079,7 @@ void doLCDsLayout(int videoLayout)
 
 	video.layout = videoLayout;
 
-	osd->singleScreen = (video.layout == 2);
+	osd->singleScreen = (video.layout == 2) || (video.layout == 3 && customTopFocus);
 
 	RECT rc = { 0 };
 	int oldheight, oldwidth;
@@ -1151,9 +1190,19 @@ void doLCDsLayout(int videoLayout)
 			MainWindow->checkMenu(ID_LCDS_VERTICAL, false);
 			MainWindow->checkMenu(ID_LCDS_ONE, true);
 		}
+		else if (video.layout == 3)
+		{
+			// custom layouts keep the current window size
+			newwidth = oldwidth;
+			newheight = oldheight;
+			MainWindow->checkMenu(ID_LCDS_HORIZONTAL, false);
+			MainWindow->checkMenu(ID_LCDS_VERTICAL, false);
+			MainWindow->checkMenu(ID_LCDS_ONE, false);
+		}
 		else
 			return;
 	}
+	RefreshCustomLayoutMenu();
 
 	video.layout_old = video.layout;
 	WritePrivateProfileInt("Video", "LCDsLayout", video.layout, IniName);
@@ -1182,6 +1231,88 @@ void doLCDsLayout(int videoLayout)
 			ShowFullScreen(hwnd);
 		else
 			ShowWindow(hwnd, SW_MAXIMIZE);
+	}
+}
+
+// ---- custom layouts (video.layout == 3) ----
+static int customReturnLayout = -1; // layout to go back to when leaving the "focus top screen" mode
+
+static void ApplyCustomLayout()
+{
+	WritePrivateProfileInt("Video", "CustomLayoutPreset", customLayoutPreset, IniName);
+	WritePrivateProfileInt("Video", "CustomBottomScale", customBottomScale, IniName);
+	osd->singleScreen = (video.layout == 2) || (video.layout == 3 && customTopFocus);
+	RefreshCustomLayoutMenu();
+	UpdateWndRects(MainWindow->getHWnd());
+	if (romloaded) Display();
+}
+
+static bool EnterCustomLayout()
+{
+	if (video.layout == 3) return true;
+	doLCDsLayout(3);
+	if (video.layout == 3) return true;
+	MessageBox(MainWindow->getHWnd(), "Custom layouts need the DirectDraw display method (Config > Display Method).", "DeSmuME", MB_OK | MB_ICONINFORMATION);
+	return false;
+}
+
+static void SetCustomLayoutPreset(int preset)
+{
+	customLayoutPreset = preset;
+	customTopFocus = false;
+	customReturnLayout = -1;
+	if (!EnterCustomLayout()) return;
+	ApplyCustomLayout();
+}
+
+static void ChangeCustomBottomScale(int delta)
+{
+	if (video.layout != 3)
+	{
+		customTopFocus = false;
+		customReturnLayout = -1;
+		if (!EnterCustomLayout()) return;
+	}
+	customBottomScale += delta;
+	if (customBottomScale < 25) customBottomScale = 25;
+	if (customBottomScale > 100) customBottomScale = 100;
+	ApplyCustomLayout();
+}
+
+void ToggleTopScreenFocus()
+{
+	if (video.layout != 3)
+	{
+		// enter the focus mode from any layout, and remember where to return
+		const int previousLayout = video.layout;
+		customTopFocus = true;
+		if (!EnterCustomLayout())
+		{
+			customTopFocus = false;
+			return;
+		}
+		customReturnLayout = previousLayout;
+		ApplyCustomLayout();
+	}
+	else if (customTopFocus)
+	{
+		customTopFocus = false;
+		if (customReturnLayout >= 0 && customReturnLayout != 3)
+		{
+			const int backTo = customReturnLayout;
+			customReturnLayout = -1;
+			doLCDsLayout(backTo);
+		}
+		else
+		{
+			customReturnLayout = -1;
+			ApplyCustomLayout();
+		}
+	}
+	else
+	{
+		customTopFocus = true;
+		ApplyCustomLayout();
 	}
 }
 
@@ -1981,10 +2112,15 @@ int _main()
 	//video.width = GetPrivateProfileInt("Video", "Width", GPU_FRAMEBUFFER_NATIVE_WIDTH, IniName);
 	//video.height = GetPrivateProfileInt("Video", "Height", GPU_FRAMEBUFFER_NATIVE_HEIGHT * 2, IniName);
 	video.layout_old = video.layout = GetPrivateProfileInt("Video", "LCDsLayout", 0, IniName);
-	if (video.layout > 2)
+	if (video.layout > 3)
 	{
 		video.layout = video.layout_old = 0;
 	}
+	customLayoutPreset = GetPrivateProfileInt("Video", "CustomLayoutPreset", 0, IniName);
+	if (customLayoutPreset < 0 || customLayoutPreset > 2) customLayoutPreset = 0;
+	customBottomScale = GetPrivateProfileInt("Video", "CustomBottomScale", 50, IniName);
+	if (customBottomScale < 25 || customBottomScale > 100) customBottomScale = 50;
+	customTopFocus = false;
 	video.swap = GetPrivateProfileInt("Video", "LCDsSwap", 0, IniName);
 	
 	CommonSettings.hud.FpsDisplay = GetPrivateProfileBool("Display","Display Fps", false, IniName);
@@ -2336,7 +2472,7 @@ int _main()
 	}
 #endif
 
-	osd->singleScreen = (video.layout == 2);
+	osd->singleScreen = (video.layout == 2) || (video.layout == 3 && customTopFocus);
 	
 	GetPrivateProfileString("General", "Language", "0", text, 80, IniName);	
 
@@ -3632,6 +3768,10 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			MainWindow->checkMenu(ID_LCDS_VERTICAL, ((video.layout==0)));
 			MainWindow->checkMenu(ID_LCDS_HORIZONTAL, ((video.layout==1)));
 			MainWindow->checkMenu(ID_LCDS_ONE, ((video.layout==2)));
+			MainWindow->checkMenu(ID_LCDS_CUSTOM_TOPBIG, (video.layout==3 && customLayoutPreset==0));
+			MainWindow->checkMenu(ID_LCDS_CUSTOM_HYBRID, (video.layout==3 && customLayoutPreset==1));
+			MainWindow->checkMenu(ID_LCDS_CUSTOM_PIP, (video.layout==3 && customLayoutPreset==2));
+			MainWindow->checkMenu(ID_LCDS_CUSTOM_FOCUS, (video.layout==3 && customTopFocus));
 			// LCDs swap
 			MainWindow->checkMenu(ID_LCDS_NOSWAP,  video.swap == 0);
 			MainWindow->checkMenu(ID_LCDS_SWAP,    video.swap == 1);
@@ -3987,7 +4127,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 					minX = video.rotatedwidthgap() * 2;
 					minY = video.rotatedheightgap() * screenSizeRatio / 2;
 				}
-				else if (video.layout == 2)
+				else if (video.layout == 2 || video.layout == 3)
 				{
 					minX = video.rotatedwidthgap();
 					minY = video.rotatedheightgap() / 2;
@@ -4019,6 +4159,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 			if (video.layout == 1) return 1;
 			if (video.layout == 2) return 1;
+			if (video.layout == 3) return 1;
 
 			if(setGap)
 			{
@@ -4360,6 +4501,7 @@ DOKEYDOWN:
 			{
 				const bool isMainGPUFirst = (GPU->GetDisplayInfo().engineID[NDSDisplayID_Main] == GPUEngineID_Main);
 				if ((video.layout == 2) && ((video.swap == 0) || (video.swap == 2 && isMainGPUFirst) || (video.swap == 3 && !isMainGPUFirst))) return 0;
+				if ((video.layout == 3) && (CustomLayoutTouchRect(NULL) == NULL)) return 0;
 				
 				bool untouch = false;
 				ToDSScreenRelativeCoords(x,y,1);
@@ -4947,6 +5089,25 @@ DOKEYDOWN:
 		case ID_LCDS_ONE:
 			if (video.layout == 2) return 0;
 			doLCDsLayout(2);
+			return 0;
+
+		case ID_LCDS_CUSTOM_TOPBIG:
+			SetCustomLayoutPreset(0);
+			return 0;
+		case ID_LCDS_CUSTOM_HYBRID:
+			SetCustomLayoutPreset(1);
+			return 0;
+		case ID_LCDS_CUSTOM_PIP:
+			SetCustomLayoutPreset(2);
+			return 0;
+		case ID_LCDS_CUSTOM_BIGGER:
+			ChangeCustomBottomScale(5);
+			return 0;
+		case ID_LCDS_CUSTOM_SMALLER:
+			ChangeCustomBottomScale(-5);
+			return 0;
+		case ID_LCDS_CUSTOM_FOCUS:
+			ToggleTopScreenFocus();
 			return 0;
 
 		case ID_LCDS_NOSWAP:

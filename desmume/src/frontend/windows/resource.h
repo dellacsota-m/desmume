@@ -965,6 +965,12 @@
 #define ID_LCDS_VERTICAL                40055
 #define ID_LCDS_HORIZONTAL              40056
 #define ID_LCDS_ONE                     40057
+#define ID_LCDS_CUSTOM_TOPBIG           40170
+#define ID_LCDS_CUSTOM_HYBRID           40171
+#define ID_LCDS_CUSTOM_PIP              40172
+#define ID_LCDS_CUSTOM_BIGGER           40173
+#define ID_LCDS_CUSTOM_SMALLER          40174
+#define ID_LCDS_CUSTOM_FOCUS            40175
 #define ID_LCDS_SWAP                    40058
 #define ID_LCDS_NOSWAP                  40059
 #define ID_LCDS_MAINGPU                 40060
@@ -1158,7 +1164,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        128
-#define _APS_NEXT_COMMAND_VALUE         40159
+#define _APS_NEXT_COMMAND_VALUE         40176
 #define _APS_NEXT_CONTROL_VALUE         1068
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

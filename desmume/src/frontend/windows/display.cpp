@@ -18,6 +18,7 @@ along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 #include "display.h"
 
 #include <mmsystem.h>
+#include <algorithm>
 #include <windowsx.h>
 
 #include "main.h"
@@ -116,7 +117,7 @@ void GetNdsScreenRect(RECT* r)
 	RECT zero;
 	SetRect(&zero, 0, 0, 0, 0);
 	if (zero == MainScreenRect) *r = SubScreenRect;
-	else if (zero == SubScreenRect || video.layout == 2) *r = MainScreenRect;
+	else if (zero == SubScreenRect || video.layout == 2 || (video.layout == 3 && IsRectEmpty(&SubScreenRect))) *r = MainScreenRect;
 	else
 	{
 		RECT* dstRects[2] = { &MainScreenRect, &SubScreenRect };
@@ -271,6 +272,43 @@ static void DD_FillRect(LPDIRECTDRAWSURFACE7 surf, int left, int top, int right,
 	//fx.dwFillColor = color;
 	fx.dwFillColor = 0; //color is just for debug
 	surf->Blt(&r, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &fx);
+}
+
+// Custom layout: paints black every part of the given box that is covered by neither screen
+static void DD_FillCustomLayoutPockets(const RECT& box)
+{
+	int xs[6], ys[6];
+	int nx = 0, ny = 0;
+	xs[nx++] = box.left;  xs[nx++] = box.right;
+	ys[ny++] = box.top;   ys[ny++] = box.bottom;
+
+	const RECT* screens[2] = { &MainScreenRect, &SubScreenRect };
+	for (int i = 0; i < 2; i++)
+	{
+		if (IsRectEmpty(screens[i])) continue;
+		xs[nx++] = screens[i]->left;  xs[nx++] = screens[i]->right;
+		ys[ny++] = screens[i]->top;   ys[ny++] = screens[i]->bottom;
+	}
+
+	std::sort(xs, xs + nx);
+	std::sort(ys, ys + ny);
+
+	for (int i = 0; i + 1 < nx; i++)
+	{
+		for (int j = 0; j + 1 < ny; j++)
+		{
+			if (xs[i] == xs[i + 1] || ys[j] == ys[j + 1]) continue;
+			if (xs[i] < box.left || xs[i + 1] > box.right || ys[j] < box.top || ys[j + 1] > box.bottom) continue;
+
+			POINT center;
+			center.x = (xs[i] + xs[i + 1]) / 2;
+			center.y = (ys[j] + ys[j + 1]) / 2;
+			if (PtInRect(&MainScreenRect, center)) continue;
+			if (!IsRectEmpty(&SubScreenRect) && PtInRect(&SubScreenRect, center)) continue;
+
+			DD_FillRect(ddraw.surface.primary, xs[i], ys[j], xs[i + 1], ys[j + 1], RGB(0, 0, 0));
+		}
+	}
 }
 
 static void OGL_DrawTexture(RECT* srcRects, RECT* dstRects)
@@ -535,6 +573,8 @@ static void DD_DoDisplay(u32* srcFramebuffer, int videoWidth, int videoHeight)
 				DD_FillRect(ddraw.surface.primary, SubScreenRect.left, wr.top, wr.right, SubScreenRect.top, RGB(0, 0, 0)); //Top gap left when centering the resized screen
 				DD_FillRect(ddraw.surface.primary, SubScreenRect.left, SubScreenRect.bottom, wr.right, wr.bottom, RGB(0, 0, 0)); //Bottom gap left when centering the resized screen
 			}
+			if (video.layout == 3)
+				DD_FillCustomLayoutPockets(r);
 		}
 	}
 
@@ -542,12 +582,15 @@ static void DD_DoDisplay(u32* srcFramebuffer, int videoWidth, int videoHeight)
 	{
 		if (i && video.layout == 2)
 			break;
+		if (i && video.layout == 3 && IsRectEmpty(dstRects[i]))
+			break;
 
 		if (!ddraw.blt(dstRects[i], srcRects[i])) return;
 	}
 
 	if (video.layout == 1) return;
 	if (video.layout == 2) return;
+	if (video.layout == 3) return;
 
 	// Gap
 	if (video.screengap > 0)
@@ -810,6 +853,103 @@ void UpdateScreenRects()
 	}
 }
 
+int customLayoutPreset = 0;
+int customBottomScale = 50;
+bool customTopFocus = false;
+
+// Returns the rectangle (screen coordinates) currently showing the touch screen, or NULL if it is hidden.
+// touchIsLowerPosition is set to true when the touch screen is the one drawn in the lower position.
+const RECT* CustomLayoutTouchRect(bool* touchIsLowerPosition)
+{
+	const bool isMainGPUFirst = (GPU->GetDisplayInfo().engineID[NDSDisplayID_Main] == GPUEngineID_Main);
+	const bool topOnTop = (video.swap == 0) || (video.swap == 2 && isMainGPUFirst) || (video.swap == 3 && !isMainGPUFirst);
+	if (touchIsLowerPosition) *touchIsLowerPosition = topOnTop;
+	const RECT* r = topOnTop ? &SubScreenRect : &MainScreenRect;
+	return IsRectEmpty(r) ? NULL : r;
+}
+
+static void SetRectFromClientArea(HWND hwnd, RECT* out, int l, int t, int r, int b)
+{
+	POINT p1, p2;
+	p1.x = l; p1.y = t;
+	p2.x = r; p2.y = b;
+	ClientToScreen(hwnd, &p1);
+	ClientToScreen(hwnd, &p2);
+	SetRect(out, p1.x, p1.y, p2.x, p2.y);
+}
+
+// Computes MainScreenRect / SubScreenRect for the custom layouts.
+// The toolbar height is added afterwards by UpdateWndRects(), like for the other layouts.
+static void UpdateCustomLayoutRects(HWND hwnd, const RECT& rc, int tbheight)
+{
+	const int availW = max(1, (int)(rc.right - rc.left));
+	const int availH = max(1, (int)((rc.bottom - rc.top) - tbheight));
+	const int ox = (int)rc.left;
+	const int oy = (int)rc.top;
+
+	int scale = customBottomScale;
+	if (scale < 25) scale = 25;
+	if (scale > 100) scale = 100;
+
+	int topX, topY, topW, topH;
+	int botX = 0, botY = 0, botW = 0, botH = 0;
+	const bool showBottom = !customTopFocus;
+
+	if (!showBottom || customLayoutPreset == 2)
+	{
+		// top screen fills the window (focus mode, or bottom screen drawn over it)
+		topW = min(availW, availH * 4 / 3);
+		if (topW < 1) topW = 1;
+		topH = topW * 3 / 4;
+		topX = ox + (availW - topW) / 2;
+		topY = oy + (availH - topH) / 2;
+
+		if (showBottom)
+		{
+			botW = topW * scale * 6 / 1000;
+			if (botW < 1) botW = 1;
+			botH = botW * 3 / 4;
+			const int margin = max(4, topW / 64);
+			botX = topX + topW - botW - margin;
+			botY = topY + topH - botH - margin;
+		}
+	}
+	else if (customLayoutPreset == 1)
+	{
+		// hybrid: large top screen on the left, small bottom screen on the right, aligned at the bottom
+		topW = min(availW * 100 / (100 + scale), availH * 4 / 3);
+		if (topW < 1) topW = 1;
+		topH = topW * 3 / 4;
+		botW = topW * scale / 100;
+		if (botW < 1) botW = 1;
+		botH = botW * 3 / 4;
+		topX = ox + (availW - (topW + botW)) / 2;
+		topY = oy + (availH - topH) / 2;
+		botX = topX + topW;
+		botY = topY + topH - botH;
+	}
+	else
+	{
+		// large top screen, smaller bottom screen below it, both centered
+		topW = min(availW, availH * 400 / (3 * (100 + scale)));
+		if (topW < 1) topW = 1;
+		topH = topW * 3 / 4;
+		botW = topW * scale / 100;
+		if (botW < 1) botW = 1;
+		botH = botW * 3 / 4;
+		topX = ox + (availW - topW) / 2;
+		topY = oy + (availH - (topH + botH)) / 2;
+		botX = ox + (availW - botW) / 2;
+		botY = topY + topH;
+	}
+
+	SetRectFromClientArea(hwnd, &MainScreenRect, topX, topY, topX + topW, topY + topH);
+	if (showBottom)
+		SetRectFromClientArea(hwnd, &SubScreenRect, botX, botY, botX + botW, botY + botH);
+	else
+		SetRectEmpty(&SubScreenRect);
+}
+
 void UpdateWndRects(HWND hwnd, RECT* newClientRect)
 {
 	POINT ptClient;
@@ -841,7 +981,11 @@ void UpdateWndRects(HWND hwnd, RECT* newClientRect)
 
 	tbheight = MainWindowToolbar->GetHeight();
 
-	if (video.layout == 1) //horizontal
+	if (video.layout == 3) //custom layouts
+	{
+		UpdateCustomLayoutRects(hwnd, rc, tbheight);
+	}
+	else if (video.layout == 1) //horizontal
 	{
 		rc = CalculateDisplayLayoutWrapper(rc, (int)((float)GPU_FRAMEBUFFER_NATIVE_WIDTH * 2 / screenSizeRatio), GPU_FRAMEBUFFER_NATIVE_HEIGHT, tbheight, maximized);
 

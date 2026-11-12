@@ -1676,6 +1676,13 @@ BEGIN
             MENUITEM "Horizontal",                  ID_LCDS_HORIZONTAL
             MENUITEM "One LCD",                     ID_LCDS_ONE
             MENUITEM SEPARATOR
+            MENUITEM "Custom: Large top, small bottom", ID_LCDS_CUSTOM_TOPBIG
+            MENUITEM "Custom: Hybrid (side by side)", ID_LCDS_CUSTOM_HYBRID
+            MENUITEM "Custom: Bottom picture-in-picture", ID_LCDS_CUSTOM_PIP
+            MENUITEM "Custom: Bottom screen bigger", ID_LCDS_CUSTOM_BIGGER
+            MENUITEM "Custom: Bottom screen smaller", ID_LCDS_CUSTOM_SMALLER
+            MENUITEM "Focus top screen",            ID_LCDS_CUSTOM_FOCUS
+            MENUITEM SEPARATOR
             MENUITEM "Top first (default)",         ID_LCDS_NOSWAP
             MENUITEM "Bottom first",                ID_LCDS_SWAP
             MENUITEM "Main screen first",           ID_LCDS_MAINGPU

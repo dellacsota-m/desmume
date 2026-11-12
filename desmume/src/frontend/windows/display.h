@@ -95,6 +95,12 @@ extern int lastskiprate;
 extern VideoInfo video;
 
 extern RECT FullScreenRect, MainScreenRect, SubScreenRect, GapRect;
+
+// Custom layouts (video.layout == 3)
+extern int customLayoutPreset;   // 0 = large top / small bottom, 1 = hybrid side by side, 2 = bottom picture-in-picture
+extern int customBottomScale;    // bottom screen size, in percent of the top screen (25..100)
+extern bool customTopFocus;      // true = only the top screen is shown, filling the window
+const RECT* CustomLayoutTouchRect(bool* touchIsLowerPosition);
 const int kGapNone = 0;
 const int kGapBorder = 5;
 const int kGapNDS = 64; // extremely tilted (but some games seem to use this value)
