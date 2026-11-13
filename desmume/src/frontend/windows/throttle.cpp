@@ -79,6 +79,18 @@ void DecreaseSpeed(void) {
 	WritePrivateProfileInt("Video","FPS Scaler Index", desiredFpsScalerIndex, IniName);
 }
 
+// Sets the speed limiter directly (index into desiredFpsScalers; 5 = 100%, 1 = 200%, 0 = 400%). Not saved to the ini.
+void SetSpeedScalerIndex(int index)
+{
+	const int maxIndex = (int)(sizeof(desiredFpsScalers)/sizeof(desiredFpsScalers[0])) - 1;
+	if(index < 0) index = 0;
+	if(index > maxIndex) index = maxIndex;
+	desiredFpsScalerIndex = index;
+	u64 desiredFpsScaler = desiredFpsScalers[desiredFpsScalerIndex];
+	desiredfps = core_desiredfps * desiredFpsScaler / 256;
+	desiredspf = 65536.0f / desiredfps;
+}
+
 static u64 GetCurTime(void)
 {
 	if(tmethod)

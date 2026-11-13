@@ -22,6 +22,7 @@ extern int FastForward;
 extern bool FrameLimit;
 void IncreaseSpeed();
 void DecreaseSpeed();
+void SetSpeedScalerIndex(int index);
 
 void InitSpeedThrottle();
 void SpeedThrottle();

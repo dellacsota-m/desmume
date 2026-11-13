@@ -853,6 +853,7 @@ void UpdateScreenRects()
 	}
 }
 
+int sidebarReservedWidth = 0;
 int customLayoutPreset = 0;
 int customBottomScale = 50;
 bool customTopFocus = false;
@@ -980,6 +981,10 @@ void UpdateWndRects(HWND hwnd, RECT* newClientRect)
 		rc = FullScreenRect;
 
 	tbheight = MainWindowToolbar->GetHeight();
+
+	// the sidebar takes its width from the left of the picture area
+	SidebarReposition(hwnd, tbheight);
+	rc.left += sidebarReservedWidth;
 
 	if (video.layout == 3) //custom layouts
 	{

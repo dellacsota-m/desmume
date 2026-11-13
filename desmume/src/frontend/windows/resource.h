@@ -971,6 +971,7 @@
 #define ID_LCDS_CUSTOM_BIGGER           40173
 #define ID_LCDS_CUSTOM_SMALLER          40174
 #define ID_LCDS_CUSTOM_FOCUS            40175
+#define ID_VIEW_SIDEBAR                 40176
 #define ID_LCDS_SWAP                    40058
 #define ID_LCDS_NOSWAP                  40059
 #define ID_LCDS_MAINGPU                 40060
@@ -1164,7 +1165,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        128
-#define _APS_NEXT_COMMAND_VALUE         40176
+#define _APS_NEXT_COMMAND_VALUE         40177
 #define _APS_NEXT_CONTROL_VALUE         1068
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

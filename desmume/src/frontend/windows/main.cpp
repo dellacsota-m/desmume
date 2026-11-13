@@ -1252,7 +1252,7 @@ static bool EnterCustomLayout()
 	if (video.layout == 3) return true;
 	doLCDsLayout(3);
 	if (video.layout == 3) return true;
-	MessageBox(MainWindow->getHWnd(), "Custom layouts need the DirectDraw display method (Config > Display Method).", "DeSmuME", MB_OK | MB_ICONINFORMATION);
+	MessageBoxA(MainWindow->getHWnd(), "Custom layouts need the DirectDraw display method (Config > Display Method).", "DeSmuME", MB_OK | MB_ICONINFORMATION);
 	return false;
 }
 
@@ -1315,6 +1315,8 @@ void ToggleTopScreenFocus()
 		ApplyCustomLayout();
 	}
 }
+
+#include "sidebar.h"
 
 void CheckMessages()
 {
@@ -3825,6 +3827,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 			// Show toolbar
 			MainWindow->checkMenu(IDM_SHOWTOOLBAR, MainWindowToolbar->Visible());
+			MainWindow->checkMenu(ID_VIEW_SIDEBAR, sidebarEnabled);
 	
 			// Show Menu In Fullscreen Mode
 			MainWindow->checkMenu(IDM_FS_MENU, (GetStyle()&DWS_FS_MENU) != 0);
@@ -3949,6 +3952,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			UpdateScreenRects();
 
 			MainWindowToolbar = new CToolBar(hwnd);
+			SidebarCreate(hwnd);
 			MainWindowToolbar->AppendButton(IDM_OPEN, IDB_OPEN, TBSTATE_ENABLED, false);
 			MainWindowToolbar->AppendSeparator();
 			MainWindowToolbar->AppendButton(IDM_PAUSE, IDB_PLAY, 0, false);
@@ -4145,7 +4149,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 					minX = (MainScreenRect.right - MainScreenRect.left) + (SubScreenRect.right - SubScreenRect.left);
 					setGap = true;
 				}
-				else if(ForceRatio)
+				else if(ForceRatio && video.layout != 3) // custom layouts fit their screens in any window shape
 				{
 					forceRatioFlags |= WINCLASS::KEEPX;
 					forceRatioFlags |= WINCLASS::KEEPY;
@@ -5619,6 +5623,10 @@ DOKEYDOWN:
 			}
 			return 0;
 		}
+
+		case ID_VIEW_SIDEBAR:
+			SidebarSetEnabled(!sidebarEnabled);
+			return 0;
 
 		case IDM_SHOWTOOLBAR:
 			{

@@ -1767,6 +1767,7 @@ BEGIN
         MENUITEM "&Pad To Integer",             IDC_VIEW_PADTOINTEGER
         MENUITEM SEPARATOR
         MENUITEM "Show &Toolbar",               IDM_SHOWTOOLBAR
+        MENUITEM "Show &Sidebar",               ID_VIEW_SIDEBAR
         MENUITEM SEPARATOR
         POPUP "&HUD"
         BEGIN

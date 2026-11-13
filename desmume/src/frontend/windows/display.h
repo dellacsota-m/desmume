@@ -101,6 +101,10 @@ extern int customLayoutPreset;   // 0 = large top / small bottom, 1 = hybrid sid
 extern int customBottomScale;    // bottom screen size, in percent of the top screen (25..100)
 extern bool customTopFocus;      // true = only the top screen is shown, filling the window
 const RECT* CustomLayoutTouchRect(bool* touchIsLowerPosition);
+
+// Sidebar (defined in main.cpp / sidebar.h)
+extern int sidebarReservedWidth;   // width taken from the left of the picture area (0 = hidden or overlay)
+void SidebarReposition(HWND hwnd, int tbheight);
 const int kGapNone = 0;
 const int kGapBorder = 5;
 const int kGapNDS = 64; // extremely tilted (but some games seem to use this value)
