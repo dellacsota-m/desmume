@@ -100,6 +100,7 @@ struct SCustomKeys
 	SCustomKey StylusAutoHold;
 	SCustomKey LCDsMode;
 	SCustomKey LCDsSwap;
+	SCustomKey TopFocus, SidebarToggle;
 
 	SCustomKey ListCheats, SearchCheats, ToggleCheats;
 

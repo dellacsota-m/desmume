@@ -400,6 +400,18 @@ void HK_LCDsSwap(int)
 	LCDsSwap(-1);
 }
 
+extern void ToggleTopScreenFocus();
+void HK_TopFocus(int)
+{
+	ToggleTopScreenFocus();
+}
+
+extern void ToggleSidebarVisibility();
+void HK_SidebarToggle(int)
+{
+	ToggleSidebarVisibility();
+}
+
 extern int sndvolume;
 void HK_IncreaseVolume(int, bool justPressed)
 {
@@ -820,6 +832,18 @@ void InitCustomKeys (SCustomKeys *keys)
 	keys->LCDsSwap.name = STRW(ID_LABEL_HK31);
 	keys->LCDsSwap.page = HOTKEY_PAGE_TOOLS;
 	keys->LCDsSwap.key = VK_NEXT;
+
+	keys->TopFocus.handleKeyUp = HK_TopFocus;
+	keys->TopFocus.code = "TopScreenFocus";
+	keys->TopFocus.name = L"Focus top screen";
+	keys->TopFocus.page = HOTKEY_PAGE_TOOLS;
+	keys->TopFocus.key = VK_PRIOR;
+
+	keys->SidebarToggle.handleKeyUp = HK_SidebarToggle;
+	keys->SidebarToggle.code = "SidebarToggle";
+	keys->SidebarToggle.name = L"Show/hide sidebar";
+	keys->SidebarToggle.page = HOTKEY_PAGE_TOOLS;
+	keys->SidebarToggle.key = VK_HOME;
 
 	keys->ListCheats.handleKeyDown = HK_ListCheats;
 	keys->ListCheats.code = "ListCheats";
